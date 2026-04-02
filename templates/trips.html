@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Trip Expense Splitter - Personal Finance Manager{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">
+    <i class="bi bi-airplane"></i> Trip Expense Splitter
+</h1>
+
+<!-- Create New Trip -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-gradient text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Plan a New Trip</h5>
+    </div>
+    <div class="card-body">
+        <form id="tripForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="tripName" class="form-label">Trip Name *</label>
+                    <input type="text" class="form-control" id="tripName" name="trip_name" placeholder="e.g., Goa Vacation" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="destination" class="form-label">Destination *</label>
+                    <input type="text" class="form-control" id="destination" name="destination" placeholder="Where are you going?" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label class="form-label">Add Friends *</label>
+                    <div id="membersContainer">
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control member-input" placeholder="Friend name" required>
+                            <button type="button" class="btn btn-outline-secondary" onclick="addMemberField()">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle"></i> Create Trip
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Active Trips -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="bi bi-list"></i> Your Trips</h5>
+    </div>
+    <div class="card-body">
+        <div id="tripsContainer">
+            <p class="text-center text-muted py-4">No trips yet. Create one above!</p>
+        </div>
+    </div>
+</div>
+
+<!-- Trip Detail Modal -->
+<div class="modal fade" id="tripDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="tripTitle">Trip Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Add Expense Section -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="bi bi-plus-circle"></i> Add Expense</h6>
+                    <form id="expenseForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="expenseDesc" class="form-label">Description *</label>
+                                <input type="text" class="form-control" id="expenseDesc" placeholder="e.g., Hotel" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="expenseAmount" class="form-label">Amount (₹) *</label>
+                                <input type="number" class="form-control" id="expenseAmount" placeholder="0.00" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="paidBy" class="form-label">Paid By *</label>
+                                <select class="form-select" id="paidBy" required>
+                                    <option value="">Select who paid</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="expenseDate" class="form-label">Date *</label>
+                                <input type="date" class="form-control" id="expenseDate" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Add Expense</button>
+                    </form>
+                </div>
+
+                <hr>
+
+                <!-- Expenses List -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="bi bi-receipt"></i> Expenses</h6>
+                    <div id="expensesList">
+                        <p class="text-muted">No expenses yet</p>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Expense Splits -->
+                <div>
+                    <h6 class="mb-3"><i class="bi bi-calculator"></i> Settlement</h6>
+                    <div id="splitsDisplay">
+                        <p class="text-muted">No expenses to split</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Messages -->
+<div id="alertContainer" class="mt-3"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTripId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Set today's date
+    document.getElementById('expenseDate').valueAsDate = new Date();
+    
+    loadTrips();
+    
+    // Create trip form
+    document.getElementById('tripForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const memberInputs = document.querySelectorAll('.member-input');
+        const members = [];
+        memberInputs.forEach(input => {
+            if (input.value.trim()) {
+                members.push(input.value.trim());
+            }
+        });
+        
+        if (members.length === 0) {
+            showAlert('Please add at least one friend', 'warning');
+            return;
+        }
+        
+        const formData = {
+            trip_name: document.getElementById('tripName').value,
+            destination: document.getElementById('destination').value,
+            members: members
+        };
+        
+        fetch('/api/create-trip', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Trip created successfully!', 'success');
+                document.getElementById('tripForm').reset();
+                document.getElementById('membersContainer').innerHTML = `
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control member-input" placeholder="Friend name" required>
+                        <button type="button" class="btn btn-outline-secondary" onclick="addMemberField()">
+                            <i class="bi bi-plus"></i> Add
+                        </button>
+                    </div>
+                `;
+                loadTrips();
+            } else {
+                showAlert('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => showAlert('Error: ' + error.message, 'danger'));
+    });
+    
+    // Add expense form
+    document.getElementById('expenseForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            trip_id: currentTripId,
+            description: document.getElementById('expenseDesc').value,
+            amount: parseFloat(document.getElementById('expenseAmount').value),
+            paid_by: document.getElementById('paidBy').value,
+            date: document.getElementById('expenseDate').value
+        };
+        
+        fetch('/api/add-trip-expense', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Expense added!', 'success');
+                document.getElementById('expenseForm').reset();
+                document.getElementById('expenseDate').valueAsDate = new Date();
+                loadTripDetails(currentTripId);
+            } else {
+                showAlert('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => showAlert('Error: ' + error.message, 'danger'));
+    });
+});
+
+function addMemberField() {
+    const container = document.getElementById('membersContainer');
+    const newField = document.createElement('div');
+    newField.className = 'input-group mb-2';
+    newField.innerHTML = `
+        <input type="text" class="form-control member-input" placeholder="Friend name">
+        <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">
+            <i class="bi bi-trash"></i>
+        </button>
+    `;
+    container.appendChild(newField);
+}
+
+function loadTrips() {
+    fetch('/api/get-trips')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('tripsContainer');
+            
+            if (data.success && data.trips && data.trips.length > 0) {
+                container.innerHTML = data.trips.map(trip => `
+                    <div class="card mb-3 border-0 bg-light">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h5 class="mb-1">${trip.trip_name}</h5>
+                                    <p class="text-muted mb-0">
+                                        <i class="bi bi-geo-alt"></i> ${trip.destination} | 
+                                        <i class="bi bi-people"></i> ${trip.total_members} members | 
+                                        <i class="bi bi-calendar"></i> ${trip.date}
+                                    </p>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-primary btn-sm" onclick="openTripDetail(${trip.id})">
+                                        <i class="bi bi-eye"></i> Manage Trip
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<p class="text-center text-muted py-4">No trips yet. Create one above!</p>';
+            }
+        });
+}
+
+function openTripDetail(tripId) {
+    currentTripId = tripId;
+    const modal = new bootstrap.Modal(document.getElementById('tripDetailModal'));
+    modal.show();
+    loadTripDetails(tripId);
+}
+
+function loadTripDetails(tripId) {
+    fetch(`/api/get-trip/${tripId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update modal title
+                document.getElementById('tripTitle').textContent = `Trip Details - Manage Expenses`;
+                
+                // Populate paid by dropdown
+                const paidBySelect = document.getElementById('paidBy');
+                paidBySelect.innerHTML = '<option value="">Select who paid</option>';
+                data.members.forEach(member => {
+                    paidBySelect.innerHTML += `<option value="${member}">${member}</option>`;
+                });
+                
+                // Display expenses
+                const expensesList = document.getElementById('expensesList');
+                if (data.expenses && data.expenses.length > 0) {
+                    expensesList.innerHTML = data.expenses.map(e => `
+                        <div class="border-bottom pb-2 mb-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <p class="mb-0"><strong>${e.description}</strong></p>
+                                    <small class="text-muted">Paid by ${e.paid_by} on ${e.date}</small>
+                                </div>
+                                <span class="badge bg-primary">₹${parseFloat(e.amount).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    expensesList.innerHTML = '<p class="text-muted">No expenses yet</p>';
+                }
+                
+                // Display splits
+                const splitsDisplay = document.getElementById('splitsDisplay');
+                if (data.splits && data.splits.splits && Object.keys(data.splits.splits).length > 0) {
+                    let splitsHtml = `<div class="mb-3"><p class="mb-2"><strong>Total Trip Cost: ₹${parseFloat(data.splits.total).toFixed(2)}</strong></p>`;
+                    splitsHtml += `<p class="mb-3 text-muted">Each person should pay: ₹${parseFloat(data.splits.per_person).toFixed(2)}</p></div>`;
+                    
+                    splitsHtml += '<div class="table-responsive"><table class="table table-sm"><thead class="table-light"><tr><th>Person</th><th>Paid</th><th>Owes</th><th>Status</th></tr></thead><tbody>';
+                    
+                    for (const [person, split] of Object.entries(data.splits.splits)) {
+                        const balance = split.balance;
+                        let status = '';
+                        if (balance > 0.1) {
+                            status = `<span class="badge bg-success">Gets ₹${balance.toFixed(2)}</span>`;
+                        } else if (balance < -0.1) {
+                            status = `<span class="badge bg-danger">Pays ₹${Math.abs(balance).toFixed(2)}</span>`;
+                        } else {
+                            status = `<span class="badge bg-secondary">Even</span>`;
+                        }
+                        
+                        splitsHtml += `
+                            <tr>
+                                <td><strong>${person}</strong></td>
+                                <td>₹${parseFloat(split.paid).toFixed(2)}</td>
+                                <td>₹${parseFloat(split.owes).toFixed(2)}</td>
+                                <td>${status}</td>
+                            </tr>
+                        `;
+                    }
+                    splitsHtml += '</tbody></table></div>';
+                    splitsDisplay.innerHTML = splitsHtml;
+                } else {
+                    splitsDisplay.innerHTML = '<p class="text-muted">No expenses to split</p>';
+                }
+            }
+        });
+}
+
+function showAlert(message, type) {
+    const alertContainer = document.getElementById('alertContainer');
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    alertContainer.innerHTML = '';
+    alertContainer.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}

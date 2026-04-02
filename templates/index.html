@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Personal Finance Manager{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">
+    <i class="bi bi-speedometer2"></i> Financial Dashboard
+</h1>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="card-title text-white-50 mb-2">Total Expenses</p>
+                        <h3 class="card-text" id="totalExpenses">₹0.00</h3>
+                    </div>
+                    <i class="bi bi-credit-card fs-2"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="card-title text-white-50 mb-2">Total Savings</p>
+                        <h3 class="card-text" id="totalSavings">₹0.00</h3>
+                    </div>
+                    <i class="bi bi-safe fs-2"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="card-title text-white-50 mb-2">Total Investments</p>
+                        <h3 class="card-text" id="totalInvestments">₹0.00</h3>
+                    </div>
+                    <i class="bi bi-graph-up fs-2"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="card-title text-white-50 mb-2">Net Worth</p>
+                        <h3 class="card-text" id="netWorth">₹0.00</h3>
+                    </div>
+                    <i class="bi bi-wallet2 fs-2"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Expenses by Category</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="expensesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Budget vs Actual</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="budgetChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Expenses</h5>
+            </div>
+            <div class="card-body">
+                <div id="recentExpenses">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Budget Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="budgetStatus">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/get-report?period=This Month')
+        .then(response => response.json())
+        .then(data => {
+            // Update summary cards
+            document.getElementById('totalExpenses').textContent = '₹' + data.total_expenses.toFixed(2);
+            document.getElementById('totalSavings').textContent = '₹' + data.total_savings.toFixed(2);
+            document.getElementById('totalInvestments').textContent = '₹' + data.total_investments.toFixed(2);
+            document.getElementById('netWorth').textContent = '₹' + data.net_worth.toFixed(2);
+
+            // Only show expense chart if there's data
+            if (Object.keys(data.expenses_by_category).length > 0) {
+                const expenseCtx = document.getElementById('expensesChart').getContext('2d');
+                const categories = Object.keys(data.expenses_by_category);
+                const amounts = Object.values(data.expenses_by_category);
+                
+                new Chart(expenseCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: categories,
+                        datasets: [{
+                            data: amounts,
+                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'],
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            } else {
+                document.getElementById('expensesChart').parentElement.innerHTML = '<div class="alert alert-info text-center mb-0">No expenses yet</div>';
+            }
+
+            // Only show budget chart if there's data
+            if (data.budget_data.length > 0) {
+                const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+                const budgetLabels = data.budget_data.map(b => b.category);
+                const budgetAmounts = data.budget_data.map(b => b.budget);
+                const actualAmounts = data.budget_data.map(b => b.actual);
+                
+                new Chart(budgetCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: budgetLabels,
+                        datasets: [
+                            {
+                                label: 'Budget',
+                                data: budgetAmounts,
+                                backgroundColor: '#36A2EB'
+                            },
+                            {
+                                label: 'Actual',
+                                data: actualAmounts,
+                                backgroundColor: '#FF6384'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } else {
+                document.getElementById('budgetChart').parentElement.innerHTML = '<div class="alert alert-info text-center mb-0">No budget data yet</div>';
+            }
+        });
+
+    // Fetch and display recent expenses
+    fetch('/api/get-data')
+        .then(response => response.json())
+        .then(data => {
+            const recentExpensesHtml = data.expenses.slice(0, 5).map(e => `
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <div>
+                        <p class="mb-0"><strong>${e[1]}</strong></p>
+                        <small class="text-muted">${e[2]}</small>
+                    </div>
+                    <span class="badge bg-danger">₹${parseFloat(e[0]).toFixed(2)}</span>
+                </div>
+            `).join('');
+            document.getElementById('recentExpenses').innerHTML = data.expenses.length > 0 ? recentExpensesHtml : '<p class="text-muted text-center py-3">No expenses yet</p>';
+
+            // Budget status with real data
+            if (Object.keys(data.budgets).length === 0) {
+                document.getElementById('budgetStatus').innerHTML = '<p class="text-muted text-center py-3">No budgets set yet. Add one in the Budgets section.</p>';
+            } else {
+                const expensesByCategory = {};
+                data.expenses.forEach(e => {
+                    const category = e[1];
+                    const amount = parseFloat(e[0]);
+                    expensesByCategory[category] = (expensesByCategory[category] || 0) + amount;
+                });
+
+                const budgetStatusHtml = Object.keys(data.budgets).map(cat => {
+                    const budget = data.budgets[cat];
+                    const spent = expensesByCategory[cat] || 0;
+                    const percentage = (spent / budget.amount) * 100;
+                    const progressColor = percentage > 100 ? 'bg-danger' : percentage > 80 ? 'bg-warning' : 'bg-info';
+                    
+                    return `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold">${cat}</span>
+                                <span class="text-muted small">₹${spent.toFixed(2)} / ₹${budget.amount.toFixed(2)}</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar ${progressColor}" style="width: ${Math.min(percentage, 100)}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                document.getElementById('budgetStatus').innerHTML = budgetStatusHtml;
+            }
+        });
+});
+</script>
+{% endblock %}

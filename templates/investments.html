@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Investments - Personal Finance Manager{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">
+    <i class="bi bi-graph-up"></i> Manage Investments
+</h1>
+
+<!-- Add Investment Card -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-gradient text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Add New Investment</h5>
+    </div>
+    <div class="card-body">
+        <form id="investmentForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="investmentType" class="form-label">Type *</label>
+                    <select class="form-select" id="investmentType" name="type" required>
+                        <option value="">Select Type</option>
+                        <option value="Stocks">Stocks</option>
+                        <option value="Bonds">Bonds</option>
+                        <option value="Mutual Funds">Mutual Funds</option>
+                        <option value="Real Estate">Real Estate</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="investmentAmount" class="form-label">Amount *</label>
+                    <input type="number" class="form-control" id="investmentAmount" name="amount" placeholder="0.00" step="0.01" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="investmentDate" class="form-label">Date *</label>
+                    <input type="date" class="form-control" id="investmentDate" name="date" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="investmentDesc" class="form-label">Description</label>
+                    <input type="text" class="form-control" id="investmentDesc" name="description" placeholder="Add details...">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle"></i> Add Investment
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Investments List -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="bi bi-list"></i> Investment Portfolio</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th><i class="bi bi-tag"></i> Type</th>
+                        <th><i class="bi bi-currency-rupee"></i> Amount</th>
+                        <th><i class="bi bi-calendar-event"></i> Date</th>
+                        <th><i class="bi bi-chat"></i> Description</th>
+                    </tr>
+                </thead>
+                <tbody id="investmentsList">
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-3">Loading investments...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Messages -->
+<div id="alertContainer" class="mt-3"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('investmentDate').valueAsDate = new Date();
+    loadInvestments();
+    
+    document.getElementById('investmentForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            type: document.getElementById('investmentType').value,
+            amount: parseFloat(document.getElementById('investmentAmount').value),
+            date: document.getElementById('investmentDate').value,
+            description: document.getElementById('investmentDesc').value
+        };
+        
+        fetch('/api/add-investment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Investment added successfully!', 'success');
+                document.getElementById('investmentForm').reset();
+                document.getElementById('investmentDate').valueAsDate = new Date();
+                loadInvestments();
+            } else {
+                showAlert('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => showAlert('Error: ' + error.message, 'danger'));
+    });
+});
+
+function loadInvestments() {
+    fetch('/api/get-data')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('investmentsList');
+            if (data.investments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No investments yet</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.investments.map(i => `
+                <tr>
+                    <td><span class="badge bg-info">${i[0]}</span></td>
+                    <td><strong class="text-success">₹${parseFloat(i[1]).toFixed(2)}</strong></td>
+                    <td>${i[2]}</td>
+                    <td><small class="text-muted">${i[3]}</small></td>
+                </tr>
+            `).join('');
+        });
+}
+
+function showAlert(message, type) {
+    const alertContainer = document.getElementById('alertContainer');
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    alertContainer.innerHTML = '';
+    alertContainer.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}

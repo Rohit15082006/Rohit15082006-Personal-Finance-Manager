@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - Personal Finance Manager{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">
+    <i class="bi bi-bar-chart"></i> Financial Reports
+</h1>
+
+<!-- Period Selection -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Select Period</h5>
+    </div>
+    <div class="card-body">
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="period" id="thisMonth" value="This Month" checked>
+            <label class="btn btn-outline-primary" for="thisMonth">This Month</label>
+            
+            <input type="radio" class="btn-check" name="period" id="lastMonth" value="Last Month">
+            <label class="btn btn-outline-primary" for="lastMonth">Last Month</label>
+            
+            <input type="radio" class="btn-check" name="period" id="last3Months" value="Last 3 Months">
+            <label class="btn btn-outline-primary" for="last3Months">Last 3 Months</label>
+            
+            <input type="radio" class="btn-check" name="period" id="thisYear" value="This Year">
+            <label class="btn btn-outline-primary" for="thisYear">This Year</label>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <p class="card-text text-white-50 mb-2">Total Expenses</p>
+                <h3 id="reportExpenses">₹0.00</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <p class="card-text text-white-50 mb-2">Total Savings</p>
+                <h3 id="reportSavings">₹0.00</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <p class="card-text text-white-50 mb-2">Total Investments</p>
+                <h3 id="reportInvestments">₹0.00</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <p class="card-text text-white-50 mb-2">Net Worth</p>
+                <h3 id="reportNetWorth">₹0.00</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Expense Breakdown</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="expenseChart"></canvas>
+                <div id="expenseChartEmpty" class="alert alert-info text-center mb-0 d-none">No expense data available</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Budget vs Actual</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="budgetComparisonChart"></canvas>
+                <div id="budgetChartEmpty" class="alert alert-info text-center mb-0 d-none">No budget data available</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Budget Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="mb-0"><i class="bi bi-table"></i> Budget vs Actual Comparison</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Category</th>
+                        <th>Budget</th>
+                        <th>Actual</th>
+                        <th>Difference</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="budgetTableBody">
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-3">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let expenseChart = null;
+let budgetChart = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load initial report
+    loadReport('This Month');
+    
+    // Period selection
+    document.querySelectorAll('input[name="period"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            loadReport(this.value);
+        });
+    });
+});
+
+function loadReport(period) {
+    fetch(`/api/get-report?period=${encodeURIComponent(period)}`)
+        .then(response => {
+            if (!response.ok) {
+                return response.json()
+                    .then(errorData => {
+                        throw new Error(errorData.error || 'Failed to load report data');
+                    })
+                    .catch(() => {
+                        throw new Error('Failed to load report data');
+                    });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Update summary cards
+            document.getElementById('reportExpenses').textContent = '₹' + data.total_expenses.toFixed(2);
+            document.getElementById('reportSavings').textContent = '₹' + data.total_savings.toFixed(2);
+            document.getElementById('reportInvestments').textContent = '₹' + data.total_investments.toFixed(2);
+            document.getElementById('reportNetWorth').textContent = '₹' + data.net_worth.toFixed(2);
+
+            const expenseCanvas = document.getElementById('expenseChart');
+            const expenseEmptyState = document.getElementById('expenseChartEmpty');
+
+            if (expenseChart) {
+                expenseChart.destroy();
+                expenseChart = null;
+            }
+            
+            if (Object.keys(data.expenses_by_category).length > 0) {
+                expenseCanvas.classList.remove('d-none');
+                expenseEmptyState.classList.add('d-none');
+
+                const expenseCtx = expenseCanvas.getContext('2d');
+                const categories = Object.keys(data.expenses_by_category);
+                const amounts = Object.values(data.expenses_by_category);
+                
+                expenseChart = new Chart(expenseCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: categories,
+                        datasets: [{
+                            data: amounts,
+                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'],
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            } else {
+                expenseCanvas.classList.add('d-none');
+                expenseEmptyState.classList.remove('d-none');
+            }
+
+            const budgetCanvas = document.getElementById('budgetComparisonChart');
+            const budgetEmptyState = document.getElementById('budgetChartEmpty');
+
+            if (budgetChart) {
+                budgetChart.destroy();
+                budgetChart = null;
+            }
+            
+            if (data.budget_data.length > 0) {
+                budgetCanvas.classList.remove('d-none');
+                budgetEmptyState.classList.add('d-none');
+
+                const budgetCtx = budgetCanvas.getContext('2d');
+                const budgetLabels = data.budget_data.map(b => b.category);
+                const budgetAmounts = data.budget_data.map(b => b.budget);
+                const actualAmounts = data.budget_data.map(b => b.actual);
+                
+                budgetChart = new Chart(budgetCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: budgetLabels,
+                        datasets: [
+                            {
+                                label: 'Budget',
+                                data: budgetAmounts,
+                                backgroundColor: '#36A2EB'
+                            },
+                            {
+                                label: 'Actual',
+                                data: actualAmounts,
+                                backgroundColor: '#FF6384'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } else {
+                budgetCanvas.classList.add('d-none');
+                budgetEmptyState.classList.remove('d-none');
+            }
+
+            // Budget Table
+            const tbody = document.getElementById('budgetTableBody');
+            if (data.budget_data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No budget data available</td></tr>';
+            } else {
+                tbody.innerHTML = data.budget_data.map(b => {
+                    const overspent = b.actual > b.budget;
+                    const status = overspent ? 
+                        '<span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Over</span>' : 
+                        '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Good</span>';
+                    
+                    return `
+                        <tr>
+                            <td><strong>${b.category}</strong></td>
+                            <td>₹${b.budget.toFixed(2)}</td>
+                            <td>₹${b.actual.toFixed(2)}</td>
+                            <td class="${overspent ? 'text-danger' : 'text-success'}">
+                                ₹${Math.abs(b.difference).toFixed(2)}
+                            </td>
+                            <td>${status}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load report:', error);
+
+            if (expenseChart) {
+                expenseChart.destroy();
+                expenseChart = null;
+            }
+
+            if (budgetChart) {
+                budgetChart.destroy();
+                budgetChart = null;
+            }
+
+            document.getElementById('reportExpenses').textContent = '₹0.00';
+            document.getElementById('reportSavings').textContent = '₹0.00';
+            document.getElementById('reportInvestments').textContent = '₹0.00';
+            document.getElementById('reportNetWorth').textContent = '₹0.00';
+
+            const expenseCanvas = document.getElementById('expenseChart');
+            const budgetCanvas = document.getElementById('budgetComparisonChart');
+            const expenseEmptyState = document.getElementById('expenseChartEmpty');
+            const budgetEmptyState = document.getElementById('budgetChartEmpty');
+
+            expenseCanvas.classList.add('d-none');
+            budgetCanvas.classList.add('d-none');
+            expenseEmptyState.classList.remove('d-none');
+            budgetEmptyState.classList.remove('d-none');
+            expenseEmptyState.textContent = 'Unable to load report data';
+            budgetEmptyState.textContent = 'Unable to load report data';
+
+            document.getElementById('budgetTableBody').innerHTML =
+                `<tr><td colspan="5" class="text-center text-danger py-3">${error.message}</td></tr>`;
+        });
+}
+</script>
+{% endblock %}
